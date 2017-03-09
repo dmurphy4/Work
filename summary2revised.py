@@ -350,13 +350,13 @@ def summary_params(results, yname=None, xname=None, alpha=.05, use_t=True,
 
 
 # Vertical summary instance for multiple models
-def _col_params(result, float_format='%.4f', stars=True, std_error=True):
+def _col_params(result, float_format='%.4f', stars=True, stat='stderr'):
     '''Stack coefficients and standard errors in single column
     Parameters
     ----------
-    std_error : boolean
-        if true, provide standard errors in parentheses. If false, then
-    t-stats are provided in their place.
+    stat : string
+        for standard errors in parentheses, 'stderr'. For t-statistics,
+        'tstat'. For p-values, 'pvalue'.
     '''
 
     # Extract parameters
@@ -365,10 +365,12 @@ def _col_params(result, float_format='%.4f', stars=True, std_error=True):
     for col in res.columns[:2]:
         res[col] = res[col].apply(lambda x: float_format % x)
     # Std.Errors in parentheses
-    if std_error:
+    if stat == 'stderr':
         res.ix[:, 1] = '(' + res.ix[:, 1] + ')'
-    else:
+    elif stat == 'tstat':
         res.ix[:, 1] = '(' + res.ix[:, 2] + ')'
+    elif stat == 'pvalue':
+        res.ix[:, 1] = '(' + res.ix[:, 3] + ')'
     # Significance stars
     if stars:
         idx = res.ix[:, 3] < .1
@@ -420,7 +422,7 @@ def _make_unique(list_of_names):
 
 
 def summary_col(results, float_format='%.4f', model_names=[], stars=False,
-                info_dict=None, regressor_order=[], std_error=True):
+                info_dict=None, regressor_order=[], stat='stderr'):
     """
     Summarize multiple results instances side-by-side (coefs and SEs (or coefs
         and T-stats))
@@ -446,13 +448,16 @@ def summary_col(results, float_format='%.4f', model_names=[], stars=False,
     regressor_order : list of strings
         list of names of the regressors in the desired order. All regressors
         not specified will be appended to the end of the list.
+    stat : string
+        for standard errors in parentheses, 'stderr'. For t-statistics,
+        'tstat'. For p-values, 'pvalue'.
     """
 
     if not isinstance(results, list):
         results = [results]
 
     cols = [_col_params(x, stars=stars, float_format=float_format,
-        std_error=std_error) for x in results]
+        stat=stat) for x in results]
 
     # Unique column names (pandas has problems merging otherwise)
     if model_names:
@@ -502,10 +507,12 @@ def summary_col(results, float_format='%.4f', model_names=[], stars=False,
 
     smry = Summary()
     smry.add_df(summ, header=True, align='l')
-    if std_error:
+    if stat == 'stderr':
         smry.add_text('Standard Errors in parentheses.')
-    else:
-        smry.add_text('t statistics in parentheses.')
+    elif stat == 'tstat':
+        smry.add_text('t-statistics in parentheses.')
+    elif stat == 'pvalue':
+        smry.add_text('p-values in parentheses')
     if stars:
         smry.add_text('* p<.1, ** p<.05, ***p<.01')
 
