@@ -6,8 +6,9 @@ import numpy as np
 import pandas as pd
 import datetime
 import textwrap
-from .table import SimpleTable
-from .tableformatting import fmt_latex, fmt_txt
+import re
+from statsmodels.iolib.table import SimpleTable
+from statsmodels.iolib.tableformatting import fmt_latex, fmt_txt
 from scipy.stats import ttest_ind
 
 
@@ -64,11 +65,11 @@ class Summary(object):
         self.add_df(table, index=False, header=False,
                     float_format=float_format, align=align)
 
-    def add_dict(self, d, ncols=2, align='l', float_format="%.4f"):
+    def add_dict(self, dict_to_add, num_cols=2, align='l', float_format="%.4f"):
         '''Add the contents of a Dict to summary table
         Parameters
         ----------
-        d : dict
+        dict_to_add : dict
             Keys and values are automatically coerced to strings with str().
             Users are encouraged to format them before using add_dict.
         ncols: int
@@ -77,15 +78,15 @@ class Summary(object):
             Data alignment (l/c/r)
         '''
 
-        keys = [_formatter(x, float_format) for x in iterkeys(d)]
-        vals = [_formatter(x, float_format) for x in itervalues(d)]
+        keys = [_formatter(x, float_format) for x in iterkeys(dict_to_add)]
+        vals = [_formatter(x, float_format) for x in itervalues(dict_to_add)]
         data = np.array(lzip(keys, vals))
 
-        if data.shape[0] % ncols != 0:
-            pad = ncols - (data.shape[0] % ncols)
+        if data.shape[0] % num_cols != 0:
+            pad = num_cols - (data.shape[0] % ncols)
             data = np.vstack([data, np.array(pad * [['', '']])])
 
-        data = np.split(data, ncols)
+        data = np.split(data, num_cols)
         data = reduce(lambda x, y: np.hstack([x, y]), data)
         self.add_array(data, align=align)
 
@@ -295,7 +296,7 @@ def summary_model(results):
 
 
 def summary_params(results, yname=None, xname=None, alpha=.05, use_t=True,
-                   skip_header=False, float_format="%.4f"):
+                   skip_header=False, float_format="%.4f", suppress=None):
     '''create a summary table of parameters from results instance
     Parameters
     ----------
@@ -316,6 +317,10 @@ def summary_params(results, yname=None, xname=None, alpha=.05, use_t=True,
         header row is added.
     float_format : string
         float formatting options (e.g. ".3g")
+    suppress : list of strings or string (for regular expression)
+        if a list, list of indeces of rows to be left out of the table. If a
+        string, any index beginning with that string will be deleted from the
+        rows.
     Returns
     -------
     params_table : SimpleTable instance
@@ -346,31 +351,45 @@ def summary_params(results, yname=None, xname=None, alpha=.05, use_t=True,
     else:
         data.index = xname
 
+    if suppress != None:
+        if isinstance(suppress,list):
+            data.drop([y for y in data.index if y in suppress],inplace=True)
+        elif isinstance(suppress,basestring):
+            data.drop([y for y in data.index if
+            re.match(suppress+".*",y)],inplace=True)
+
     return data
 
 
 # Vertical summary instance for multiple models
-def _col_params(result, float_format='%.4f', stars=True, stat='stderr'):
+def _col_params(result, float_format='%.4f', stars=True, stat='stderr',
+                suppress=None):
     '''Stack coefficients and standard errors in single column
     Parameters
     ----------
     stat : string
         for standard errors in parentheses, 'stderr'. For t-statistics,
         'tstat'. For p-values, 'pvalue'.
+    suppress : list of strings or string (for regular expression)
+        if a list, list of indeces of rows to be left out of the table. If a
+        string, any index beginning with that string will be deleted from the
+        rows.
     '''
 
     # Extract parameters
-    res = summary_params(result)
-    # Format float
-    for col in res.columns[:2]:
-        res[col] = res[col].apply(lambda x: float_format % x)
-    # Std.Errors in parentheses
+    res = summary_params(result,suppress=suppress)
+    # Choosing std.errors, t.stats, p.values (numbers are the columns in res)
     if stat == 'stderr':
-        res.ix[:, 1] = '(' + res.ix[:, 1] + ')'
+        val = 1
     elif stat == 'tstat':
-        res.ix[:, 1] = '(' + res.ix[:, 2] + ')'
-    elif stat == 'pvalue':
-        res.ix[:, 1] = '(' + res.ix[:, 3] + ')'
+        val = 2
+    elif stat == "pvalue":
+        val = 3
+    # Format float
+    for col in res.columns[[0,val]]:
+        res[col] = res[col].apply(lambda x: float_format % x)
+    # Std.Errors, t.stats, or p.values in parentheses
+    res.ix[:, val] = '(' + res.ix[:, val] + ')'
     # Significance stars
     if stars:
         idx = res.ix[:, 3] < .1
@@ -379,8 +398,8 @@ def _col_params(result, float_format='%.4f', stars=True, stat='stderr'):
         res.ix[idx, 0] = res.ix[idx, 0] + '*'
         idx = res.ix[:, 3] < .01
         res.ix[idx, 0] = res.ix[idx, 0] + '*'
-    # Stack Coefs and Std.Errors
-    res = res.ix[:, :2]
+    # Stack Coefs and Std.Errors,t.stats, or p.values
+    res = res.ix[:,[0,val]]
     res = res.stack()
     res = pd.DataFrame(res)
     res.columns = [str(result.model.endog_names)]
@@ -407,10 +426,10 @@ def _col_info(result, info_dict=None):
     out = pd.DataFrame({str(result.model.endog_names): out}, index=index)
     return out
 
-
 def _make_unique(list_of_names):
     if len(set(list_of_names)) == len(list_of_names):
         return list_of_names
+
     # pandas does not like it if multiple columns have the same names
     from collections import defaultdict
     name_counter = defaultdict(str)
@@ -420,9 +439,8 @@ def _make_unique(list_of_names):
         header.append(_name+" " + name_counter[_name])
     return header
 
-
 def summary_col(results, float_format='%.4f', model_names=[], stars=False,
-                info_dict=None, regressor_order=[], stat='stderr'):
+                info_dict=None, regressor_order=[], stat='stderr',suppress=None):
     """
     Summarize multiple results instances side-by-side (coefs and SEs (or coefs
         and T-stats))
@@ -451,13 +469,17 @@ def summary_col(results, float_format='%.4f', model_names=[], stars=False,
     stat : string
         for standard errors in parentheses, 'stderr'. For t-statistics,
         'tstat'. For p-values, 'pvalue'.
+    suppress : list of strings or string (for regular expression)
+        if a list, list of indeces of rows to be left out of the table. If a
+        string, any index beginning with that string will be deleted from the
+        rows.
     """
 
     if not isinstance(results, list):
         results = [results]
 
     cols = [_col_params(x, stars=stars, float_format=float_format,
-        stat=stat) for x in results]
+        stat=stat,suppress=suppress) for x in results]
 
     # Unique column names (pandas has problems merging otherwise)
     if model_names:

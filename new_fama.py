@@ -29,7 +29,7 @@ def fama_macbeth(**kwargs):
 
     return klass(**kwargs)
 
-def formula_fm(formula, data=None):
+def formula_fm(formula, data=None, nw_lags=None, nw_lags_beta=None):
     """Wrapper for Fama-Macbeth regression under formula interface.
     Parameters
     ----------
@@ -39,7 +39,7 @@ def formula_fm(formula, data=None):
     """
     y,X = patsy.dmatrices(formula,data,return_type='dataframe')
     y = y[y.columns[0]] #In order to make 'y' a series instead of a dataframe
-    fama_reg = fama_macbeth(y=y,x=X)
+    fama_reg = fama_macbeth(y=y, x=X, nw_lags=nw_lags, nw_lags=nw_lags_beta)
 
     return fama_reg
 
