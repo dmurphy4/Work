@@ -317,7 +317,7 @@ def summary_params(results, yname=None, xname=None, alpha=.05, use_t=True,
         header row is added.
     float_format : string
         float formatting options (e.g. ".3g")
-    suppress : list of strings or string (for regular expression)
+    suppress : list of strings or regular expression (string + ".*")
         if a list, list of indeces of rows to be left out of the table. If a
         string, any index beginning with that string will be deleted from the
         rows.
@@ -356,7 +356,7 @@ def summary_params(results, yname=None, xname=None, alpha=.05, use_t=True,
             data.drop([y for y in data.index if y in suppress],inplace=True)
         elif isinstance(suppress,basestring):
             data.drop([y for y in data.index if
-            re.match(suppress+".*",y)],inplace=True)
+            re.match(suppress,y)],inplace=True)
 
     return data
 
@@ -370,7 +370,7 @@ def _col_params(result, float_format='%.4f', stars=True, stat='stderr',
     stat : string
         for standard errors in parentheses, 'stderr'. For t-statistics,
         'tstat'. For p-values, 'pvalue'.
-    suppress : list of strings or string (for regular expression)
+    suppress : list of strings or regular expression (string + ".*")
         if a list, list of indeces of rows to be left out of the table. If a
         string, any index beginning with that string will be deleted from the
         rows.
@@ -440,7 +440,8 @@ def _make_unique(list_of_names):
     return header
 
 def summary_col(results, float_format='%.4f', model_names=[], stars=False,
-                info_dict=None, regressor_order=[], stat='stderr',suppress=None):
+                info_dict=None, regressor_order=[], stat='stderr',
+                suppress=None):
     """
     Summarize multiple results instances side-by-side (coefs and SEs (or coefs
         and T-stats))
@@ -469,7 +470,7 @@ def summary_col(results, float_format='%.4f', model_names=[], stars=False,
     stat : string
         for standard errors in parentheses, 'stderr'. For t-statistics,
         'tstat'. For p-values, 'pvalue'.
-    suppress : list of strings or string (for regular expression)
+    suppress : list of strings or regular expression (string + ".*")
         if a list, list of indeces of rows to be left out of the table. If a
         string, any index beginning with that string will be deleted from the
         rows.
